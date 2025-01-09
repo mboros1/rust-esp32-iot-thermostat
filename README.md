@@ -18,3 +18,11 @@
 * use low power mode to reduce power usage
 * the best design would be some sort of local hub. I think using some sort of linux server would be best; can start with my raspberry pi TODO: add a link with info to the model and docs
 * use esp-idf with rust std crate. increases size of files, but can code much faster
+
+
+
+### Hook up thermostat:
+
+Yellow (DATA) → connect to an ESP32-C3 GPIO pin (e.g., GPIO5).
+Red (VCC) → 3.3V on the dev kit (the DS18B20 can handle 3.3–5 V, but 3.3 V is standard on ESP32).
+Black (GND) → GND on the dev kit.
