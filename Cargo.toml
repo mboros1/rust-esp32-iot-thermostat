@@ -19,5 +19,7 @@ experimental = ["esp-idf-svc/experimental"]
 [dependencies]
 log = "0.4"
 esp-idf-svc = { version = "0.50", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
+onewire = "0.3.13"
+embedded-hal = "0.2.7"
 [build-dependencies]
 embuild = "0.33"
