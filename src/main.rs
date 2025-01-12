@@ -1,4 +1,4 @@
-use esp_idf_svc::hal::{gpio::{InputOutput, PinDriver, Gpio5}, delay::FreeRtos, prelude::Peripherals};
+use esp_idf_svc::hal::{delay::FreeRtos, gpio::{Gpio5, InputOutput, PinDriver}, prelude::Peripherals};
 use embedded_hal::digital::v2::{InputPin, OutputPin, StatefulOutputPin};
 use onewire::{ds18b20, DeviceSearch, OneWire};
 
@@ -55,11 +55,55 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
     log::info!("Starting Electric Dreams Super AI Crypto Thermostat");
 
-    let peripherals = Peripherals::take().unwrap();
+    let mut peripherals = Peripherals::take().unwrap();
+
+    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio0) {
+        if pin.is_high() {
+            log::info!("GPIO0 is HIGH");
+        }
+    }
+
+    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio1) {
+        if pin.is_high() {
+            log::info!("GPIO1 is HIGH");
+        }
+    }
+
+    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio2) {
+        if pin.is_high() {
+            log::info!("GPIO2 is HIGH");
+        }
+    }
+
+    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio3) {
+        if pin.is_high() {
+            log::info!("GPIO3 is HIGH");
+        }
+    }
+
+    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio4) {
+        if pin.is_high() {
+            log::info!("GPIO4 is HIGH");
+        }
+    }
+
+    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio5) {
+        if pin.is_high() {
+            log::info!("GPIO5 is HIGH");
+        }
+    }
 
     let pin = peripherals.pins.gpio5;
 
     let driver = PinDriver::input_output_od(pin).unwrap();
+
+
+    if driver.is_high() {
+        log::info!("GPIO5 is HIGH");
+    } else {
+        log::info!("GPIO5 is LOW");
+    }
+
     let mut open_drain_pin = OpenDrainPin::new(driver);
 
     let mut wire = OneWire::new(&mut open_drain_pin, false);
