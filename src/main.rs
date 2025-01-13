@@ -1,51 +1,16 @@
-use esp_idf_svc::hal::{delay::FreeRtos, gpio::{Gpio5, InputOutput, PinDriver}, prelude::Peripherals};
-use embedded_hal::digital::v2::{InputPin, OutputPin, StatefulOutputPin};
-use onewire::{ds18b20, DeviceSearch, OneWire};
+use std::time::Duration;
 
-struct OpenDrainPin<'a> {
-    driver: PinDriver<'a, Gpio5, InputOutput>,
-}
+use esp_idf_hal::delay::FreeRtos;
 
-impl<'a> OpenDrainPin<'a> {
-    pub fn new(driver: PinDriver<'a, Gpio5, InputOutput>) -> Self {
-        Self {driver }
-    }
-}
 
-impl<'a> OutputPin for OpenDrainPin<'a> {
-    type Error = esp_idf_svc::hal::gpio::GpioError;
-
-    fn set_low(&mut self) -> Result<(), Self::Error> {
-        self.driver.set_low().map_err(|e| esp_idf_svc::hal::gpio::GpioError::other(e))
-    }
-
-    fn set_high(&mut self) -> Result<(), Self::Error> {
-        self.driver.set_high().map_err(|e| esp_idf_svc::hal::gpio::GpioError::other(e))
-    }
-
-}
-impl<'a> InputPin for OpenDrainPin<'a> {
-    type Error = esp_idf_svc::hal::gpio::GpioError;
-
-    fn is_high(&self) -> Result<bool, Self::Error> {
-        Ok(self.driver.is_high())
-    }
-
-    fn is_low(&self) -> Result<bool, Self::Error> {
-        Ok(self.driver.is_low())
-    }
-}
-
-impl<'a> StatefulOutputPin for OpenDrainPin<'a> {
-    fn is_set_high(&self) -> Result<bool, Self::Error> {
-        Ok(self.driver.is_set_high())
-    }
-
-    fn is_set_low(&self) -> Result<bool, Self::Error> {
-        Ok(self.driver.is_set_low())
-    }
-}
-
+#[cfg(all(
+    esp_idf_soc_rmt_supported,
+    not(feature = "rmt-legacy"),
+    esp_idf_comp_espressif__onewire_bus_enabled,
+))]
+use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
+use esp_idf_hal::peripherals::Peripherals;
+use esp_idf_sys::EspError;
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -55,86 +20,34 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
     log::info!("Starting Electric Dreams Super AI Crypto Thermostat");
 
-    let mut peripherals = Peripherals::take().unwrap();
-
-    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio0) {
-        if pin.is_high() {
-            log::info!("GPIO0 is HIGH");
-        }
-    }
-
-    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio1) {
-        if pin.is_high() {
-            log::info!("GPIO1 is HIGH");
-        }
-    }
-
-    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio2) {
-        if pin.is_high() {
-            log::info!("GPIO2 is HIGH");
-        }
-    }
-
-    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio3) {
-        if pin.is_high() {
-            log::info!("GPIO3 is HIGH");
-        }
-    }
-
-    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio4) {
-        if pin.is_high() {
-            log::info!("GPIO4 is HIGH");
-        }
-    }
-
-    if let Ok(pin) = PinDriver::input(&mut peripherals.pins.gpio5) {
-        if pin.is_high() {
-            log::info!("GPIO5 is HIGH");
-        }
-    }
-
+    let peripherals = Peripherals::take().unwrap();
     let pin = peripherals.pins.gpio5;
+    let channel = peripherals.rmt.channel0;
 
-    let driver = PinDriver::input_output_od(pin).unwrap();
+    let mut onewire_bus: OWDriver = OWDriver::new(pin, channel).unwrap();
 
 
-    if driver.is_high() {
-        log::info!("GPIO5 is HIGH");
-    } else {
-        log::info!("GPIO5 is LOW");
+    let device = {
+        let mut search = onewire_bus.search().unwrap();
+        search.next()
+    };
+
+    if device.is_none() {
+        println!("no device found");
+        return;
     }
 
-    let mut open_drain_pin = OpenDrainPin::new(driver);
-
-    let mut wire = OneWire::new(&mut open_drain_pin, false);
-
-    let mut search = DeviceSearch::new();
-    let mut delay = FreeRtos;
-
-    log::info!("scanning devices...");
-    // TODO: no devices are getting connected; try debug the physical hardware with the multimeter
-    //       
-    let mut i = 1;
-    while let Some(device) = wire.search_next(&mut search, &mut delay).unwrap() {
-        log::info!("checking device {}...", i);
-        i += 1;
-        match device.address[0] {
-            ds18b20::FAMILY_CODE => {
-                log::info!("thermostat found..");
-                let thermostat = ds18b20::DS18B20::new::<esp_idf_svc::hal::sys::EspError>(device).unwrap();
-                let resolution = thermostat.measure_temperature(&mut wire, &mut delay).unwrap();
-                FreeRtos::delay_ms(resolution.time_ms().into());
-                let temperature = thermostat.read_temperature(&mut wire, &mut delay).unwrap();
-
-                log::info!("Temperature: {} C", temperature);
-
-            },
-            _ => {
-                log::info!("unknown found..");
-                // unknown device type
-            }
-        }
+    let device = device.unwrap();
+    if let Err(err) = device {
+        println!("error occured searching for device, err={}", err);
+        return;
     }
 
+    let device = device.unwrap();
+    println!(
+        "Found device: {:?}, family code = {}",
+        device,
+        device.family_code()
+    );
 }
 

@@ -21,5 +21,13 @@ log = "0.4"
 esp-idf-svc = { version = "0.50", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
 onewire = "0.3.13"
 embedded-hal = "0.2.7"
+esp-idf-hal = "0.45.1"
+esp-idf-sys = "0.36.0"
 [build-dependencies]
 embuild = "0.33"
+
+
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "onewire_bus", version = "^1.0.2" }
+[patch.crates-io]
+esp-idf-sys = { git = "https://github.com/esp-rs/esp-idf-sys", rev = "2728b85" }
