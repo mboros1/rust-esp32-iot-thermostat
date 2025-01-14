@@ -26,3 +26,12 @@
 Yellow (DATA) → connect to an ESP32-C3 GPIO pin (e.g., GPIO5).
 Red (VCC) → 3.3V on the dev kit (the DS18B20 can handle 3.3–5 V, but 3.3 V is standard on ESP32).
 Black (GND) → GND on the dev kit.
+
+### Hook up relay:
+
+NC -> thermostat white
+COM -> thermostat red
+
+VCC -> 3v3
+IN -> ESP32-C3 GPIO pin
+GND -> GND
