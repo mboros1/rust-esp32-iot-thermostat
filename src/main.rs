@@ -3,11 +3,6 @@ use std::time::Duration;
 use esp_idf_hal::delay::FreeRtos;
 
 
-#[cfg(all(
-    esp_idf_soc_rmt_supported,
-    not(feature = "rmt-legacy"),
-    esp_idf_comp_espressif__onewire_bus_enabled,
-))]
 use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_sys::EspError;
@@ -62,11 +57,6 @@ pub fn c_to_f(celsius: f32) -> f32 {
     celsius * 9.0 / 5.0 + 32.0
 }
 
-#[cfg(all(
-    esp_idf_soc_rmt_supported,
-    not(esp_idf_version_major = "4"),
-    esp_idf_comp_espressif__onewire_bus_enabled,
-))]
 fn ds18b20_send_command<'a>(addr: &OWAddress, bus: &OWDriver, cmd: u8) -> Result<(), EspError> {
     let mut buf = [0; 10];
     buf[0] = OWCommand::MatchRom as _;
@@ -84,11 +74,7 @@ enum Ds18b20Command {
     WriteScratch = 0x4E,
     ReadScratch = 0xBE,
 }
-#[cfg(all(
-    esp_idf_soc_rmt_supported,
-    not(esp_idf_version_major = "4"),
-    esp_idf_comp_espressif__onewire_bus_enabled,
-))]
+
 fn ds18b20_trigger_temp_conversion<'a>(addr: &OWAddress, bus: &OWDriver) -> Result<(), EspError> {
     // reset bus and check if the ds18b20 is present
     bus.reset()?;
@@ -101,11 +87,7 @@ fn ds18b20_trigger_temp_conversion<'a>(addr: &OWAddress, bus: &OWDriver) -> Resu
 
     Ok(())
 }
-#[cfg(all(
-    esp_idf_soc_rmt_supported,
-    not(esp_idf_version_major = "4"),
-    esp_idf_comp_espressif__onewire_bus_enabled,
-))]
+
 fn ds18b20_get_temperature<'a>(addr: &OWAddress, bus: &OWDriver) -> Result<f32, EspError> {
     bus.reset()?;
 
