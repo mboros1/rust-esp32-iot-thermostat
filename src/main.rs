@@ -7,6 +7,12 @@ use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_sys::EspError;
 
+
+// TODO: connect relay: VCC -> 3v3, GND -> GND, IN -> 4; COM -> thermostat red, NO -> thermostat
+// white
+//
+// TODO: check whether relay on NO closes when pin is high or low
+
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
@@ -28,18 +34,18 @@ fn main() {
     };
 
     if device.is_none() {
-        println!("no device found");
+        log::info!("no device found");
         return;
     }
 
     let device = device.unwrap();
     if let Err(err) = device {
-        println!("error occured searching for device, err={}", err);
+        log::info!("error occured searching for device, err={}", err);
         return;
     }
 
     let device = device.unwrap();
-    println!(
+    log::info!(
         "Found device: {:?}, family code = {}",
         device,
         device.family_code()
@@ -48,7 +54,7 @@ fn main() {
     loop {
         ds18b20_trigger_temp_conversion(&device, &onewire_bus).unwrap();
         let temp = ds18b20_get_temperature(&device, &onewire_bus).unwrap();
-        println!("Temperature: {} C, {} F", temp, c_to_f(temp));
+        log::info!("Temperature: {} C, {} F", temp, c_to_f(temp));
         FreeRtos::delay_ms(3000);
     }
 }
