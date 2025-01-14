@@ -3,15 +3,11 @@ use std::time::Duration;
 use esp_idf_hal::delay::FreeRtos;
 
 
+use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_sys::EspError;
 
-
-// TODO: connect relay: VCC -> 3v3, GND -> GND, IN -> 4; COM -> thermostat red, NO -> thermostat
-// white
-//
-// TODO: check whether relay on NO closes when pin is high or low
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -23,6 +19,10 @@ fn main() {
 
     let peripherals = Peripherals::take().unwrap();
     let pin = peripherals.pins.gpio5;
+    let pin4 = peripherals.pins.gpio4;
+
+    let mut relay_input = PinDriver::output(pin4).unwrap();
+
     let channel = peripherals.rmt.channel0;
 
     let mut onewire_bus: OWDriver = OWDriver::new(pin, channel).unwrap();
@@ -51,11 +51,26 @@ fn main() {
         device.family_code()
     );
 
+
+    let mut relay_high = false;
+
     loop {
         ds18b20_trigger_temp_conversion(&device, &onewire_bus).unwrap();
         let temp = ds18b20_get_temperature(&device, &onewire_bus).unwrap();
         log::info!("Temperature: {} C, {} F", temp, c_to_f(temp));
+
+        if relay_high {
+            relay_input.set_high().unwrap();
+            log::info!("Relay input high!");
+            relay_high = false;
+        } else {
+            relay_input.set_low().unwrap();
+            log::info!("Relay input low!");
+            relay_high = true;
+        }
+
         FreeRtos::delay_ms(3000);
+
     }
 }
 
