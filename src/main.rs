@@ -11,6 +11,11 @@ use esp_idf_svc::http::server::EspHttpServer;
 use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, EspWifi};
 use esp_idf_sys::{EspError, ESP_ERR_INVALID_ARG};
 
+// TODO: refactor so thermostat logic is in tasks
+// TODO: save temperature to a deque like structure to calculate rolling averages
+// TODO: think about thermostat temp controls; like compare the delta/rolling average of temp
+// calculations, how much to go over/under the set temperature
+
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
