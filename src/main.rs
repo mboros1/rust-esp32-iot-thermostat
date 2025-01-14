@@ -2,19 +2,16 @@ use std::time::Duration;
 
 use esp_idf_hal::delay::FreeRtos;
 
-
 use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_sys::EspError;
 
-
 // TODO: make a server that controls the thermostat:
 //       1. connect to wifi
 //       2. start server
 //       3. on server, display temperature and target temp, make target temp adjustable
-// TODO: 
-
+// TODO:
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -33,7 +30,6 @@ fn main() {
     let channel = peripherals.rmt.channel0;
 
     let mut onewire_bus: OWDriver = OWDriver::new(pin, channel).unwrap();
-
 
     let device = {
         let mut search = onewire_bus.search().unwrap();
@@ -58,7 +54,6 @@ fn main() {
         device.family_code()
     );
 
-
     let mut relay_high = false;
 
     loop {
@@ -77,7 +72,6 @@ fn main() {
         }
 
         FreeRtos::delay_ms(3000);
-
     }
 }
 
@@ -85,7 +79,7 @@ pub fn c_to_f(celsius: f32) -> f32 {
     celsius * 9.0 / 5.0 + 32.0
 }
 
-fn ds18b20_send_command<'a>(addr: &OWAddress, bus: &OWDriver, cmd: u8) -> Result<(), EspError> {
+fn ds18b20_send_command(addr: &OWAddress, bus: &OWDriver, cmd: u8) -> Result<(), EspError> {
     let mut buf = [0; 10];
     buf[0] = OWCommand::MatchRom as _;
     let addr = addr.address().to_le_bytes();
@@ -103,7 +97,7 @@ enum Ds18b20Command {
     ReadScratch = 0xBE,
 }
 
-fn ds18b20_trigger_temp_conversion<'a>(addr: &OWAddress, bus: &OWDriver) -> Result<(), EspError> {
+fn ds18b20_trigger_temp_conversion(addr: &OWAddress, bus: &OWDriver) -> Result<(), EspError> {
     // reset bus and check if the ds18b20 is present
     bus.reset()?;
 
@@ -116,7 +110,7 @@ fn ds18b20_trigger_temp_conversion<'a>(addr: &OWAddress, bus: &OWDriver) -> Resu
     Ok(())
 }
 
-fn ds18b20_get_temperature<'a>(addr: &OWAddress, bus: &OWDriver) -> Result<f32, EspError> {
+fn ds18b20_get_temperature(addr: &OWAddress, bus: &OWDriver) -> Result<f32, EspError> {
     bus.reset()?;
 
     ds18b20_send_command(addr, bus, Ds18b20Command::ReadScratch as u8)?;
