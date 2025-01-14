@@ -9,6 +9,13 @@ use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_sys::EspError;
 
 
+// TODO: make a server that controls the thermostat:
+//       1. connect to wifi
+//       2. start server
+//       3. on server, display temperature and target temp, make target temp adjustable
+// TODO: 
+
+
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
