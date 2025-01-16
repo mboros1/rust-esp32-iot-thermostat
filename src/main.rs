@@ -29,10 +29,22 @@ fn main() {
 
     let ssid = ""; // TODO: fill in with my actual SSID
     let pwd = ""; // TODO: fill in with my actual pwd
-    let _wifi = wifi(ssid, pwd, peripherals.modem, sysloop);
+    let _wifi = match wifi(ssid, pwd, peripherals.modem, sysloop) {
+        Ok(wifi) => wifi,
+        Err(e) => {
+            log::error!("Failed to connect to wifi: {:?}", e);
+            return;
+        }
+    };
 
-    let mut server =
-        EspHttpServer::new(&esp_idf_svc::http::server::Configuration::default()).unwrap();
+    let mut server = match EspHttpServer::new(&esp_idf_svc::http::server::Configuration::default())
+    {
+        Ok(srv) => srv,
+        Err(e) => {
+            log::error!("Failed to start http server: {:?}", e);
+            return;
+        }
+    };
 
     server
         .fn_handler("/index.html", esp_idf_svc::http::Method::Get, |request| {
@@ -52,28 +64,24 @@ fn main() {
 
     let mut onewire_bus: OWDriver = OWDriver::new(pin, channel).unwrap();
 
-    let device = {
-        let mut search = onewire_bus.search().unwrap();
-        search.next()
+    let device = match onewire_bus.search().unwrap().next() {
+        Some(Ok(dev)) => {
+            log::info!(
+                "Found device: {:?}, family code = {}",
+                dev,
+                dev.family_code()
+            );
+            dev
+        }
+        Some(Err(err)) => {
+            log::error!("Error occured searching for device: {:?}", err);
+            return;
+        }
+        None => {
+            log::info!("No device found");
+            return;
+        }
     };
-
-    if device.is_none() {
-        log::info!("no device found");
-        return;
-    }
-
-    let device = device.unwrap();
-    if let Err(err) = device {
-        log::info!("error occured searching for device, err={}", err);
-        return;
-    }
-
-    let device = device.unwrap();
-    log::info!(
-        "Found device: {:?}, family code = {}",
-        device,
-        device.family_code()
-    );
 
     let mut relay_high = false;
 
