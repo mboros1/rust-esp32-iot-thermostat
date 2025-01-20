@@ -1,13 +1,14 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use esp_idf_hal::delay::FreeRtos;
 
 use esp_idf_hal::gpio::PinDriver;
-use esp_idf_hal::io::Write;
 use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
-use esp_idf_svc::http::server::EspHttpServer;
+use esp_idf_svc::nvs::EspDefaultNvs;
 use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, EspWifi};
 use esp_idf_sys::{EspError, ESP_ERR_INVALID_ARG};
 
@@ -15,6 +16,40 @@ use esp_idf_sys::{EspError, ESP_ERR_INVALID_ARG};
 // TODO: save temperature to a deque like structure to calculate rolling averages
 // TODO: think about thermostat temp controls; like compare the delta/rolling average of temp
 // calculations, how much to go over/under the set temperature
+
+static RELAY_HIGH: AtomicBool = AtomicBool::new(false);
+static TARGET_TEMP: LazyLock<Arc<Mutex<f32>>> = LazyLock::new(|| Arc::new(Mutex::new(22.0)));
+
+struct PID {
+    kp: f32,
+    ki: f32,
+    kd: f32,
+    previous_error: f32,
+    integral: f32,
+}
+
+impl PID {
+    fn new(kp: f32, ki: f32, kd: f32) -> Self {
+        PID {
+            kp,
+            ki,
+            kd,
+            previous_error: 0.0,
+            integral: 0.0,
+        }
+    }
+
+    fn update(&mut self, setpoint: f32, measured: f32, dt: f32) -> f32 {
+        let error = setpoint - measured;
+        self.integral += error * dt;
+        let derivative = (error - self.previous_error) / dt;
+        self.previous_error = error;
+
+        // PID output
+        self.kp * error + self.ki * self.integral + self.kd * derivative
+    }
+}
+
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -25,35 +60,11 @@ fn main() {
     log::info!("Starting Electric Dreams Super AI Crypto Thermostat");
 
     let peripherals = Peripherals::take().unwrap();
-    let sysloop = EspSystemEventLoop::take().unwrap();
 
-    let ssid = ""; // TODO: fill in with my actual SSID
-    let pwd = ""; // TODO: fill in with my actual pwd
-    let _wifi = match wifi(ssid, pwd, peripherals.modem, sysloop) {
-        Ok(wifi) => wifi,
-        Err(e) => {
-            log::error!("Failed to connect to wifi: {:?}", e);
-            return;
-        }
-    };
+    let mut pid = PID::new(1.0, 0.1, 0.01);
+    let dt = 3.0;
 
-    let mut server = match EspHttpServer::new(&esp_idf_svc::http::server::Configuration::default())
-    {
-        Ok(srv) => srv,
-        Err(e) => {
-            log::error!("Failed to start http server: {:?}", e);
-            return;
-        }
-    };
-
-    server
-        .fn_handler("/index.html", esp_idf_svc::http::Method::Get, |request| {
-            request
-                .into_ok_response()
-                .unwrap()
-                .write_all(b"<html><body>Hello world!</body></html>")
-        })
-        .unwrap();
+    // TODO: implement BLE configuration
 
     let pin = peripherals.pins.gpio5;
     let pin4 = peripherals.pins.gpio4;
@@ -89,16 +100,45 @@ fn main() {
         ds18b20_trigger_temp_conversion(&device, &onewire_bus).unwrap();
         let temp = ds18b20_get_temperature(&device, &onewire_bus).unwrap();
         log::info!("Temperature: {} C, {} F", temp, c_to_f(temp));
+        
+        /* TODO: implement BLE temp_characteristic
+         // Send temperature over BLE
+         let temp_str = format!("{:.2}", temp);
+         temp_characteristic.set_value(temp_str.as_bytes())?;
+         temp_characteristic.notify()?; 
+        */
 
-        if relay_high {
-            relay_input.set_high().unwrap();
-            log::info!("Relay input high!");
-            relay_high = false;
-        } else {
-            relay_input.set_low().unwrap();
-            log::info!("Relay input low!");
-            relay_high = true;
+        /* TODO: implement BLE target_characteristic
+         // Update the target temperature if a new value is written via BLE
+        if let Ok(target_temp_value) = target_characteristic.get_value() {
+            if let Ok(target_temp_str) = std::str::from_utf8(&target_temp_value) {
+                if let Ok(new_target) = target_temp_str.parse::<f32>() {
+                    let mut target_temp = TARGET_TEMP.lock().unwrap(); // Lock mutex
+                    *target_temp = new_target; // Update value
+                    log::info!("Updated target temperature to: {} C", new_target);
+                }
+            }
         }
+        */
+
+        // Calculate PID output
+        let target_temp = *TARGET_TEMP.lock().unwrap(); // Access the value safely
+        let output = pid.update(target_temp, temp, dt);
+        // Determine relay state based on PID output
+        if output > 0.0 {
+            RELAY_HIGH.store(true, Ordering::SeqCst);
+            relay_input.set_high().unwrap(); // Turn on the heater
+            log::info!("Relay input high! (Heater ON)");
+        } else {
+            RELAY_HIGH.store(false, Ordering::SeqCst);
+            relay_input.set_low().unwrap(); // Turn off the heater
+            log::info!("Relay input low! (Heater OFF)");
+        }
+
+        let error = target_temp - temp;
+
+        log::info!("Target Temperature: {} C, {}F", target_temp, c_to_f(target_temp));
+        log::info!("Current error: {}, dt: {}", error, dt);
 
         FreeRtos::delay_ms(3000);
     }
@@ -230,4 +270,64 @@ pub fn wifi(
     log::info!("Wifi DHCP info: {:?}", ip_info);
 
     Ok(Box::new(esp_wifi))
+}
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pid_simulation() {
+        // Define the PID parameters
+        let kp = 2.0;   // Proportional gain
+        let ki = 0.5;   // Integral gain
+        let kd = 1.0;   // Derivative gain
+        let mut pid = PID::new(kp, ki, kd);
+
+        // Simulation parameters
+        let target_temp = 22.0; // Target temperature in Celsius
+        let mut current_temp = 18.0; // Starting temperature
+        let mut thermostat_on = false; // Initial thermostat state (off)
+
+        // Constants for the temperature simulation
+        const HEAT_RATE: f32 = 0.5;  // Temperature increase per iteration when on
+        const COOL_RATE: f32 = 0.1;  // Temperature decrease per iteration when off
+
+        // Store temperature history for visualization
+        let mut temp_history = vec![];
+
+        // Run the simulation for 100 iterations
+        for _ in 0..100 {
+            // Simulate temperature dynamics
+            if thermostat_on {
+                current_temp += HEAT_RATE; // Increase temperature when thermostat is on
+            } else {
+                current_temp -= COOL_RATE; // Decrease temperature when thermostat is off
+            }
+
+            // PID calculation
+            let output = pid.update(target_temp, current_temp, 1.0); // Assume dt = 1.0 second
+
+            // Update thermostat state based on PID output
+            thermostat_on = output > 0.0;
+
+            // Log current temperature
+            temp_history.push(current_temp);
+
+            // Print for debugging
+            println!(
+                "Temp: {:.2}, Output: {:.2}, Thermostat: {}",
+                current_temp,
+                output,
+                if thermostat_on { "On" } else { "Off" }
+            );
+        }
+
+        // Check if the temperature stabilizes near the target
+        let final_temp = *temp_history.last().unwrap();
+        assert!((final_temp - target_temp).abs() < 0.5, "Temperature did not stabilize");
+    }
 }
