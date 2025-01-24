@@ -3,8 +3,8 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use esp32_nimble::utilities::BleUuid;
-use esp32_nimble::NimbleProperties;
-use esp32_nimble::{uuid128, OnWriteArgs};
+use esp32_nimble::{uuid128, BLEAdvertisementData, OnWriteArgs};
+use esp32_nimble::{BLEAdvertising, NimbleProperties};
 use esp_idf_hal::delay::FreeRtos;
 
 use esp_idf_hal::gpio::PinDriver;
@@ -39,6 +39,7 @@ struct ThermostatBLE {
 impl ThermostatBLE {
     fn new() -> anyhow::Result<Self> {
         let ble_device = esp32_nimble::BLEDevice::take();
+
         let server = ble_device.get_server();
 
         // Service creation with BleUuid
@@ -78,6 +79,28 @@ impl ThermostatBLE {
             char
         };
 
+        let advertising = ble_device.get_advertising();
+        // Configure advertising after service setup
+
+        service
+            .lock()
+            .create_characteristic(
+                uuid128!("00002a01-0000-1000-8000-00805f9b34fb"), // Appearance ID
+                NimbleProperties::READ,
+            )
+            .lock()
+            .set_value(&[0x00, 0x00]); // Generic Unknown :cite[6]
+
+        advertising.lock().set_data(
+            BLEAdvertisementData::new()
+                .name("Electric Dreams Super AI Crypto Thermostat")
+                .add_service_uuid(THERMOSTAT_SERVICE_UUID),
+        )?;
+
+        // Start advertising indefinitely
+        advertising.lock().start()?;
+        log::info!("BLE advertising started");
+
         Ok(Self {
             temperature_char,
             target_temperature_char,
@@ -102,7 +125,7 @@ fn parse_temperature(data: &[u8]) -> anyhow::Result<f32> {
 static RELAY_HIGH: AtomicBool = AtomicBool::new(false);
 static TARGET_TEMP: LazyLock<Arc<Mutex<f32>>> = LazyLock::new(|| Arc::new(Mutex::new(22.0)));
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_svc::sys::link_patches();
@@ -116,8 +139,6 @@ fn main() {
 
     let mut pid = PID::new(1.0, 0.1, 0.01);
     let dt = 3.0;
-
-    // TODO: implement BLE configuration
 
     let pin = peripherals.pins.gpio5;
     let pin4 = peripherals.pins.gpio4;
@@ -139,11 +160,11 @@ fn main() {
         }
         Some(Err(err)) => {
             log::error!("Error occured searching for device: {:?}", err);
-            return;
+            return Ok(());
         }
         None => {
             log::info!("No device found");
-            return;
+            return Ok(());
         }
     };
 
