@@ -20,11 +20,6 @@ use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, EspWifi};
 use esp_idf_sys::{EspError, ESP_ERR_INVALID_ARG};
 use rust_esp32_iot_thermostat::PID;
 
-// TODO: refactor so thermostat logic is in tasks
-// TODO: save temperature to a deque like structure to calculate rolling averages
-// TODO: think about thermostat temp controls; like compare the delta/rolling average of temp
-// calculations, how much to go over/under the set temperature
-
 const THERMOSTAT_SERVICE_UUID: BleUuid = uuid128!("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
 const TEMPERATURE_CHAR_UUID: BleUuid = uuid128!("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
 const SETPOINT_CHAR_UUID: BleUuid = uuid128!("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
