@@ -1,10 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use esp32_nimble::utilities::BleUuid;
+use esp32_nimble::NimbleProperties;
 use esp32_nimble::{uuid128, BLEAdvertisementData, OnWriteArgs};
-use esp32_nimble::{BLEAdvertising, NimbleProperties};
 use esp_idf_hal::delay::FreeRtos;
 
 use esp_idf_hal::gpio::PinDriver;
@@ -12,10 +12,6 @@ use esp_idf_hal::onewire::{OWAddress, OWCommand, OWDriver};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 
-// TODO: run the PID simulation locally; currently it requires a connected esp32c3 to run
-// TODO: maybe also add to run simulated esp32 in qemu
-
-use esp_idf_svc::nvs::EspDefaultNvs;
 use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, EspWifi};
 use esp_idf_sys::{EspError, ESP_ERR_INVALID_ARG};
 use rust_esp32_iot_thermostat::PID;
@@ -118,7 +114,6 @@ fn parse_temperature(data: &[u8]) -> anyhow::Result<f32> {
 }
 
 static RELAY_HIGH: AtomicBool = AtomicBool::new(false);
-static TARGET_TEMP: LazyLock<Arc<Mutex<f32>>> = LazyLock::new(|| Arc::new(Mutex::new(22.0)));
 
 fn main() -> anyhow::Result<()> {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -133,6 +128,9 @@ fn main() -> anyhow::Result<()> {
     let peripherals = Peripherals::take().unwrap();
 
     let mut pid = PID::new(1.0, 0.1, 0.01);
+    pid.with_integral_limits(-1500.0, 1500.0)
+        .with_output_limits(-0.5, 0.5);
+
     let dt = 3.0;
 
     let pin = peripherals.pins.gpio5;
@@ -171,21 +169,7 @@ fn main() -> anyhow::Result<()> {
         // Send temperature over BLE
         ble.update_temperature(temp);
 
-        /*
-        // Update the target temperature if a new value is written via BLE
-        if let Ok(target_temp_value) = target_characteristic.get_value() {
-            if let Ok(target_temp_str) = std::str::from_utf8(&target_temp_value) {
-                if let Ok(new_target) = target_temp_str.parse::<f32>() {
-                    let mut target_temp = TARGET_TEMP.lock().unwrap(); // Lock mutex
-                    *target_temp = new_target; // Update value
-                    log::info!("Updated target temperature to: {} C", new_target);
-                }
-            }
-        }
-        */
-
-        // Calculate PID output
-        let target_temp = *TARGET_TEMP.lock().unwrap(); // Access the value safely
+        let target_temp = *ble.target_temperature.lock().unwrap();
         let output = pid.update(target_temp, temp, dt);
         // Determine relay state based on PID output
         if output > 0.0 {

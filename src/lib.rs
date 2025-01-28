@@ -4,6 +4,11 @@ pub struct PID {
     kd: f32,
     previous_error: f32,
     integral: f32,
+
+    integral_min: f32,
+    integral_max: f32,
+    output_min: f32,
+    output_max: f32,
 }
 
 impl PID {
@@ -14,17 +19,42 @@ impl PID {
             kd,
             previous_error: 0.0,
             integral: 0.0,
+            integral_min: -1000.0,
+            integral_max: 1000.0,
+            output_min: -1.0,
+            output_max: 1.0,
         }
     }
 
     pub fn update(&mut self, setpoint: f32, measured: f32, dt: f32) -> f32 {
         let error = setpoint - measured;
+
+        // Calculate potential new integral
         self.integral += error * dt;
-        let derivative = (error - self.previous_error) / dt;
+
+        // Apply anti-windup protection before updating
+        self.integral = self.integral.clamp(self.integral_min, self.integral_max);
+
+        let derivative = -(error - self.previous_error) / dt;
         self.previous_error = error;
 
-        // PID output
-        self.kp * error + self.ki * self.integral + self.kd * derivative
+        // Calculate raw output
+        let output = self.kp * error + self.ki * self.integral + self.kd * derivative;
+
+        // Final output clamping
+        output.clamp(self.output_min, self.output_max)
+    }
+
+    pub fn with_integral_limits(&mut self, min: f32, max: f32) -> &mut PID {
+        self.integral_min = min;
+        self.integral_max = max;
+        self
+    }
+
+    pub fn with_output_limits(&mut self, min: f32, max: f32) -> &mut PID {
+        self.output_min = min;
+        self.output_max = max;
+        self
     }
 }
 
@@ -87,4 +117,3 @@ mod tests {
         );
     }
 }
-
